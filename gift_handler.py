@@ -3,7 +3,6 @@ import logging
 from typing import Dict, Any
 from pyrogram import Client
 from pyrogram.types import Message
-from pyrogram.enums import MessageServiceType
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +20,7 @@ class GiftHandler:
             message: Сообщение с подарком
             
         Returns:
-            Словарь с информацией о подарке
+            Словарь с информацию о подарке
         """
         gift_info = {
             "sender": None,

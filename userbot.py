@@ -9,10 +9,11 @@ import logging
 import sys
 from pyrogram import Client, filters
 from pyrogram.types import Message
-from pyrogram.enums import MessageServiceType
+# from pyrogram.enums import MessageServiceType  # Закомментировано, так как GIFT может отсутствовать
 
 from config import API_ID, API_HASH, PHONE_NUMBER, SESSION_NAME, DEBUG
 from gift_handler import GiftHandler
+from gift_detector import AdvancedGiftDetector
 
 # Настройка логирования
 logging.basicConfig(
@@ -51,8 +52,9 @@ class TelegramGiftBot:
                 phone_number=PHONE_NUMBER
             )
             
-            # Инициализируем обработчик подарков
+            # Инициализируем обработчик и детектор подарков
             self.gift_handler = GiftHandler(self.client)
+            self.gift_detector = AdvancedGiftDetector()
             
             logger.info("UserBot инициализирован успешно")
             return True
@@ -97,9 +99,13 @@ class TelegramGiftBot:
         async def handle_service_message(client: Client, message: Message):
             """Обработчик служебных сообщений (включая подарки)"""
             try:
-                # Проверяем, является ли это подарком
-                if message.service == MessageServiceType.GIFT:
+                # Используем продвинутый детектор подарков
+                detection_result = await self.gift_detector.detect_gift(message)
+                
+                if detection_result["is_gift"]:
                     logger.info(f"🎁 Обнаружен подарок в сообщении ID: {message.id}")
+                    logger.info(f"Метод обнаружения: {detection_result['detection_method']}")
+                    logger.info(f"Уверенность: {detection_result['confidence']:.2f}")
                     
                     # Обрабатываем подарок асинхронно для максимальной скорости
                     asyncio.create_task(self.gift_handler.process_gift(message))
@@ -111,14 +117,22 @@ class TelegramGiftBot:
             except Exception as e:
                 logger.error(f"Ошибка в обработчике служебных сообщений: {e}")
         
-        @self.client.on_message(filters.private & filters.text)
+        @self.client.on_message(filters.private & ~filters.service)
         async def handle_private_message(client: Client, message: Message):
             """Обработчик личных сообщений (для дополнительной проверки подарков)"""
             try:
-                # Дополнительная проверка на подарки в текстовых сообщениях
-                if message.text and any(keyword in message.text.lower() for keyword in ['подарок', 'gift', '🎁']):
-                    if DEBUG:
-                        logger.debug(f"Возможный подарок в текстовом сообщении: {message.text[:50]}...")
+                # Используем детектор для всех личных сообщений
+                detection_result = await self.gift_detector.detect_gift(message)
+                
+                if detection_result["is_gift"]:
+                    logger.info(f"🎁 Подарок обнаружен в личном сообщении ID: {message.id}")
+                    logger.info(f"Метод: {detection_result['detection_method']}, Уверенность: {detection_result['confidence']:.2f}")
+                    
+                    # Обрабатываем подарок
+                    asyncio.create_task(self.gift_handler.process_gift(message))
+                    
+                elif DEBUG and message.text:
+                    logger.debug(f"Проанализировано личное сообщение: {message.text[:50]}...")
                         
             except Exception as e:
                 logger.error(f"Ошибка в обработчике личных сообщений: {e}")
