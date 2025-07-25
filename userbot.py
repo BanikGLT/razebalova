@@ -95,27 +95,27 @@ class TelegramGiftBot:
     def register_handlers(self):
         """Регистрация обработчиков сообщений"""
         
-        @self.client.on_message(filters.service)
-        async def handle_service_message(client: Client, message: Message):
-            """Обработчик служебных сообщений (включая подарки)"""
+        @self.client.on_message()
+        async def universal_message_handler(client: Client, message: Message):
+            """Универсальный обработчик для поиска подарков"""
             try:
                 # Используем продвинутый детектор подарков
                 detection_result = await self.gift_detector.detect_gift(message)
                 
                 if detection_result["is_gift"]:
-                    logger.info(f"🎁 Обнаружен подарок в сообщении ID: {message.id}")
+                    logger.info(f"🎁 ПОДАРОК ОБНАРУЖЕН! ID: {message.id}")
                     logger.info(f"Метод обнаружения: {detection_result['detection_method']}")
                     logger.info(f"Уверенность: {detection_result['confidence']:.2f}")
                     
-                    # Обрабатываем подарок асинхронно для максимальной скорости
+                    # Быстрая обработка подарка
                     asyncio.create_task(self.gift_handler.process_gift(message))
                     
-                elif DEBUG:
-                    # В режиме отладки логируем все служебные сообщения
+                elif DEBUG and message.service:
+                    # В режиме отладки логируем служебные сообщения
                     logger.debug(f"Служебное сообщение: {message.service}")
                     
             except Exception as e:
-                logger.error(f"Ошибка в обработчике служебных сообщений: {e}")
+                logger.error(f"Ошибка в универсальном обработчике: {e}")
         
         @self.client.on_message(filters.private & ~filters.service)
         async def handle_private_message(client: Client, message: Message):
