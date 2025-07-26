@@ -3,12 +3,12 @@ import time
 import asyncio
 import datetime
 
-# 1) MONKEY‑PATCH: расширяем границы для «Peer id invalid»
+# ─── 1) MONKEY‑PATCH для корректного распознавания всех Peer ID ─────────────
 import pyrogram.utils as u
 u.MIN_CHANNEL_ID = -1003000000000
 u.MIN_CHAT_ID    = -999999999999
 
-# 2) Exception‑handler, чтобы игнорировать «Peer id invalid» и не падать
+# ─── 2) Exception‑handler, чтобы «глотать» Peer id invalid ─────────────────
 def setup_asyncio_exception_handler():
     loop = asyncio.get_event_loop()
     def handle_exc(loop, context):
@@ -18,17 +18,10 @@ def setup_asyncio_exception_handler():
         loop.default_exception_handler(context)
     loop.set_exception_handler(handle_exc)
 
-# 3) Heartbeat: печатает «жив» каждые 5 минут
-async def heartbeat():
-    await asyncio.sleep(1)
-    while True:
-        print(f"💓 Alive at {datetime.datetime.now().isoformat()}")
-        await asyncio.sleep(60)
+# ─── 3) Основная корутина ────────────────────────────────────────────────────
+from pyrogram import Client, filters, idle
 
-# 4) Основной код бота
-from pyrogram import Client, filters
-
-def start():
+async def main():
     setup_asyncio_exception_handler()
 
     app = Client(
@@ -75,20 +68,33 @@ def start():
 
         await client.send_message(gift.from_user.id, "\n".join(report))
 
-    # Запускаем heartbeat параллельно
-    app.add_task(heartbeat())
+    # 3.1) Старт клиента
+    await app.start()
+    print("🚀 Бот запущен. Ожидаю подарки в ЛС…")
 
-    print("🚀 Бот запущен. Ожидаю подарки в личных сообщениях…")
-    app.run()
+    # 3.2) Heartbeat‐таск
+    async def heartbeat():
+        await asyncio.sleep(5)
+        while True:
+            print(f"💓 Alive at {datetime.datetime.now().isoformat()}")
+            await asyncio.sleep(300)
+    asyncio.create_task(heartbeat())
 
-# 5) WATCHDOG: при падении перезапускаем через 5 сек.
+    # 3.3) Ждём сигнал (Ctrl+C) и все обновления
+    await idle()
+
+    # 3.4) Останавливаем
+    await app.stop()
+    print("🔄 Бот остановлен.")
+
+# ─── 4) WATCHDOG: перезапускаем main() при падении ───────────────────────────
 if __name__ == "__main__":
     while True:
         try:
-            start()
+            asyncio.run(main())
         except Exception as e:
-            print(f"‼️ Бот упал с ошибкой: {e!r}. Перезапуск через 5 сек.")
+            print(f"‼️ Ошибка: {e!r}. Перезапуск через 5 сек.")
             time.sleep(5)
         else:
-            print("🔄 Бот остановлен. Перезапуск через 5 сек.")
+            print("🔄 main() завершился без ошибок. Перезапуск через 5 сек.")
             time.sleep(5)
