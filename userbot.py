@@ -1,4 +1,4 @@
-from pyrofork import Client, filters
+from pyrogram import Client, filters
 
 api_id = 27613166
 api_hash = "f8db5c0f8345c59926194dd36a07062b"
