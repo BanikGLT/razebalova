@@ -20,10 +20,10 @@ def setup_asyncio_exception_handler():
 
 # 3) Heartbeat: печатает «жив» каждые 5 минут
 async def heartbeat():
-    await asyncio.sleep(5)
+    await asyncio.sleep(1)
     while True:
         print(f"💓 Alive at {datetime.datetime.now().isoformat()}")
-        await asyncio.sleep(300)
+        await asyncio.sleep(60)
 
 # 4) Основной код бота
 from pyrogram import Client, filters
