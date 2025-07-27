@@ -3,29 +3,27 @@ import time
 import asyncio
 import datetime
 
-# ─── 1) MONKEY‑PATCH: расширяем границы ID, чтобы не ловить Peer id invalid ───
+# 1) MONKEY‑PATCH для корректного распознавания всех Peer ID
 import pyrogram.utils as u
 u.MIN_CHANNEL_ID = -1003000000000
 u.MIN_CHAT_ID    = -999999999999
 
-# ─── 2) Exception‑handler: проглатываем ValueError("Peer id invalid") ─────────
+# 2) Exception‑handler: игнорируем ValueError("Peer id invalid")
 def setup_asyncio_exception_handler():
     loop = asyncio.get_event_loop()
-    def handle_exc(loop, context):
-        exc = context.get("exception")
+    def handle_exc(loop, ctx):
+        exc = ctx.get("exception")
         if isinstance(exc, ValueError) and "Peer id invalid" in str(exc):
             return
-        loop.default_exception_handler(context)
+        loop.default_exception_handler(ctx)
     loop.set_exception_handler(handle_exc)
 
-# ─── 3) Основная корутина ─────────────────────────────────────────────────────
+# 3) Основная корутина
 async def main():
     setup_asyncio_exception_handler()
-
-    # импортируем внутри функции, чтобы utils уже патчен был
     from pyrogram import Client, filters, idle
 
-    # Client инициализируется только с именем сессии
+    # Логинимся только по сессии
     app = Client("userbot_session")
 
     @app.on_message(filters.private)
@@ -36,14 +34,13 @@ async def main():
 
         report = [
             f"🎁 Подарок: {gift.name or gift.title}",
-            f"ID подарка: {gift.id}",
-            f"Цена (stars): {gift.price}",
+            f"ID: {gift.id}",
+            f"Цена: {gift.price}",
             f"Дата: {gift.date}",
             f"Ссылка: {gift.link}",
         ]
 
-        attrs = gift.attributes or []
-        for idx, attr in enumerate(attrs, 1):
+        for idx, attr in enumerate(gift.attributes or [], 1):
             report.extend([
                 f"Атрибут {idx}:",
                 f"  type: {attr.type}",
@@ -62,33 +59,29 @@ async def main():
 
         await client.send_message(gift.from_user.id, "\n".join(report))
 
-    # 3.1) Запуск клиента
+    # Старт и heartbeat
     await app.start()
     print("🚀 Бот запущен по session‑файлу. Ожидаю подарки в ЛС…")
-
-    # 3.2) Heartbeat
     async def heartbeat():
         await asyncio.sleep(5)
         while True:
-            print(f"💓 Alive at {datetime.datetime.now().isoformat()}")
+            print("💓 Alive at", datetime.datetime.now().isoformat())
             await asyncio.sleep(300)
     asyncio.create_task(heartbeat())
 
-    # 3.3) Ждём обновлений и Ctrl+C
+    # Ждём сообщений
     await idle()
-
-    # 3.4) Останов
     await app.stop()
     print("🔄 Бот остановлен.")
 
-# ─── 4) WATCHDOG: перезапускаем main() при любой ошибке ───────────────────────
+# 4) WATCHDOG: перезапуск при падении
 if __name__ == "__main__":
     while True:
         try:
             asyncio.run(main())
         except Exception as e:
-            print(f"‼️ Ошибка: {e!r}. Перезапуск через 5 сек.")
+            print("‼️ Ошибка:", e, "— перезапуск через 5 сек.")
             time.sleep(5)
         else:
-            print("🔄 main() завершился нормально. Перезапуск через 5 сек.")
+            print("🔄 main() завершился. Перезапуск через 5 сек.")
             time.sleep(5)
