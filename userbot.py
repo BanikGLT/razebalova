@@ -1,25 +1,23 @@
 #!/usr/bin/env python3
 import os
-import time
 import asyncio
 import datetime
 
-# 1) Расширяем границы peer_id, чтобы ни один канал/группа не вываливались
+# ─── MONKEY‑PATCH: расширяем границы peer_id, чтобы не ловить Peer id invalid ──
 import pyrogram.utils as u
 u.MIN_CHANNEL_ID = -1003000000000
 u.MIN_CHAT_ID    = -999999999999
 
 from pyrogram import Client, filters, idle
+from pyrogram.raw.types import MessageActionStarGift
 
-# Настройки вашей учётки
-API_ID    = 27613166
-API_HASH  = "f8db5c0f8345c59926194dd36a07062b"
-PHONE     = "+79301221411"
-# Базовое имя сессии (файл userbot_session.session)
-SESSION   = os.path.join(os.path.dirname(__file__), "userbot_session")
+# ─── КОНФИГ ────────────────────────────────────────────────────────────────
+API_ID   = 27613166
+API_HASH = "f8db5c0f8345c59926194dd36a07062b"
+PHONE    = "+79301221411"
+SESSION  = os.path.join(os.path.dirname(__file__), "userbot_session")
 
-
-# 2) Запускаем клиент с номером — один раз попросит код, дальше автозагрузка сессии
+# ─── ИНИЦИАЛИЗАЦИЯ CLIENT ──────────────────────────────────────────────────
 app = Client(
     SESSION,
     api_id=API_ID,
@@ -27,52 +25,52 @@ app = Client(
     phone_number=PHONE
 )
 
+# ─── ОБРАБОТЧИК STAR‑GIFT ──────────────────────────────────────────────────
+@app.on_message(filters.private)
+async def handle_star_gift(client, message):
+    action = getattr(message.raw, "action", None)
+    if not isinstance(action, MessageActionStarGift):
+        return
 
-# 3) Хэндлер star‑gifts: ловим сервисные сообщения в личке
-@app.on_message(filters.private & filters.service)
-async def handle_gift(client, message):
-    try:
-        gift = getattr(message, "gift", None)
-        if not gift:
-            return
+    star = action.gift  # raw StarGift объект
 
-        # Определяем, куда слать отчёт: prefer sender, fallback — тот же чат
-        chat_id = getattr(gift.from_user, "id", message.chat.id)
+    # Составляем отчёт
+    lines = [
+        f"🎁 Star‑Gift ID: {star.id}",
+        f"Stars:         {star.stars}",
+        f"Convertable:   {star.convert_stars}",
+        f"Limited:       {bool(star.limited)}",
+        f"Sold out:      {bool(star.sold_out)}",
+        f"Date:          {star.first_sale_date or star.last_sale_date or '—'}",
+        ""
+    ]
 
-        lines = [
-            f"🎁 Подарок: {getattr(gift, 'name', None) or getattr(gift, 'title', None) or '—'}",
-            f"ID: {getattr(gift, 'id', '—')}",
-            f"Цена (stars): {getattr(gift, 'price', '—')}",
-            f"Дата: {getattr(gift, 'date', '—')}",
-            f"Ссылка: {getattr(gift, 'link', '—')}",
-            "",
-            "── Атрибуты подарка ──"
-        ]
-
-        for idx, attr in enumerate(getattr(gift, "attributes", []) or [], start=1):
+    # Атрибуты StarGift (если есть)
+    attrs = getattr(star, "attributes", None)
+    if attrs:
+        for idx, attr in enumerate(attrs, 1):
             lines.extend([
-                f" Атрибут #{idx}:",
-                f"   type:   {getattr(attr, 'type', '—')}",
-                f"   name:   {getattr(attr, 'name', '—')}",
-                f"   rarity: {getattr(attr, 'rarity', '—')}",
-                f"   date:   {getattr(attr, 'date', '—')}",
-                f"   caption:{getattr(attr, 'caption', '—')}",
-                f"   sticker:{getattr(attr, 'sticker', '—')}",
-                f"   colors: center={getattr(attr, 'center_color', '—')}, "
-                 f"edge={getattr(attr, 'edge_color', '—')}, "
-                 f"pattern={getattr(attr, 'pattern_color', '—')}, "
-                 f"text={getattr(attr, 'text_color', '—')}",
+                f"── Атрибут #{idx} ──",
+                f"  type:           {getattr(attr, 'type', '—')}",
+                f"  name:           {getattr(attr, 'name', '—')}",
+                f"  rarity:         {getattr(attr, 'rarity', '—')}",
+                f"  date:           {getattr(attr, 'date', '—')}",
+                f"  caption:        {getattr(attr, 'caption', '—')}",
+                f"  sticker:        {getattr(attr, 'sticker', '—')}",
+                f"  colors: center={getattr(attr, 'center_color', '—')}, "
+                  f"edge={getattr(attr, 'edge_color', '—')}, "
+                  f"pattern={getattr(attr, 'pattern_color', '—')}, "
+                  f"text={getattr(attr, 'text_color', '—')}",
                 ""
             ])
+    else:
+        lines.append("Нет дополнительных атрибутов.")
 
-        await client.send_message(chat_id, "\n".join(lines))
-
-    except Exception as e:
-        # Логируем любую ошибку, но не даём ей убить бота
-        print(f"⚠️ Ошибка в handle_gift: {e!r}")
+    # Отправляем отчёт обратно в тот же чат
+    await client.send_message(message.chat.id, "\n".join(lines))
 
 
-# 4) Heartbeat — индикация «я жив»
+# ─── HEARTBEAT ─────────────────────────────────────────────────────────────
 async def heartbeat():
     await asyncio.sleep(5)
     while True:
@@ -80,17 +78,16 @@ async def heartbeat():
         await asyncio.sleep(300)
 
 
-# 5) Точка входа
+# ─── MAIN ─────────────────────────────────────────────────────────────────
 async def main():
     await app.start()
-    print("🚀 Бот запущен. Жду star‑gifts в личных сообщениях…")
-    # Старт heartbeat
+    print("🚀 Userbot запущен. Жду MTProto star‑gifts в личке…")
+    # Запускаем heartbeat
     asyncio.create_task(heartbeat())
-    # Ждём Ctrl+C и приходящих сообщений
+    # Ждём сигнал Ctrl+C и прихода обновлений
     await idle()
     await app.stop()
-    print("🔄 Бот корректно остановлен.")
-
+    print("🔄 Userbot остановлен.")
 
 if __name__ == "__main__":
     asyncio.run(main())
