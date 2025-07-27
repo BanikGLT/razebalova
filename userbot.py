@@ -9,7 +9,7 @@ import pyrogram.utils as u
 u.MIN_CHANNEL_ID = -1003000000000
 u.MIN_CHAT_ID    = -999999999999
 
-from pyrogram import Client, filters, idle
+from pyrofork import Client, filters, idle
 
 # Настройки вашей учётки
 API_ID    = 27613166
