@@ -3,12 +3,12 @@ import time
 import asyncio
 import datetime
 
-# ─── 1) MONKEY‑PATCH для корректного распознавания всех Peer ID ─────────────
+# ─── 1) MONKEY‑PATCH: расширяем границы ID, чтобы не ловить Peer id invalid ───
 import pyrogram.utils as u
 u.MIN_CHANNEL_ID = -1003000000000
 u.MIN_CHAT_ID    = -999999999999
 
-# ─── 2) Exception‑handler, чтобы «глотать» Peer id invalid ─────────────────
+# ─── 2) Exception‑handler: проглатываем ValueError("Peer id invalid") ─────────
 def setup_asyncio_exception_handler():
     loop = asyncio.get_event_loop()
     def handle_exc(loop, context):
@@ -18,18 +18,15 @@ def setup_asyncio_exception_handler():
         loop.default_exception_handler(context)
     loop.set_exception_handler(handle_exc)
 
-# ─── 3) Основная корутина ────────────────────────────────────────────────────
-from pyrogram import Client, filters, idle
-
+# ─── 3) Основная корутина ─────────────────────────────────────────────────────
 async def main():
     setup_asyncio_exception_handler()
 
-    app = Client(
-        "userbot_session",
-        api_id=27613166,
-        api_hash="f8db5c0f8345c59926194dd36a07062b",
-        phone_number="+79301221411"
-    )
+    # импортируем внутри функции, чтобы utils уже патчен был
+    from pyrogram import Client, filters, idle
+
+    # Client инициализируется только с именем сессии
+    app = Client("userbot_session")
 
     @app.on_message(filters.private)
     async def handle_gift(client, message):
@@ -38,41 +35,38 @@ async def main():
             return
 
         report = [
-            f"🎁 Подарок: {getattr(gift, 'name', None) or getattr(gift, 'title', None)}",
-            f"ID подарка: {getattr(gift, 'id', None)}",
-            f"Цена (stars): {getattr(gift, 'price', None)}",
-            f"Дата: {getattr(gift, 'date', None)}",
-            f"Ссылка: {getattr(gift, 'link', None)}",
+            f"🎁 Подарок: {gift.name or gift.title}",
+            f"ID подарка: {gift.id}",
+            f"Цена (stars): {gift.price}",
+            f"Дата: {gift.date}",
+            f"Ссылка: {gift.link}",
         ]
 
-        attrs = getattr(gift, "attributes", None)
-        if attrs:
-            for idx, attr in enumerate(attrs, 1):
-                report.extend([
-                    f"Атрибут {idx}:",
-                    f"  type: {getattr(attr, 'type', None)}",
-                    f"  name: {getattr(attr, 'name', None)}",
-                    f"  rarity: {getattr(attr, 'rarity', None)}",
-                    f"  date: {getattr(attr, 'date', None)}",
-                    f"  caption: {getattr(attr, 'caption', None)}",
-                    f"  from_user: {getattr(getattr(attr, 'from_user', None), 'id', None)}",
-                    f"  to_user: {getattr(getattr(attr, 'to_user', None), 'id', None)}",
-                    f"  center_color: {getattr(attr, 'center_color', None)}",
-                    f"  edge_color: {getattr(attr, 'edge_color', None)}",
-                    f"  pattern_color: {getattr(attr, 'pattern_color', None)}",
-                    f"  text_color: {getattr(attr, 'text_color', None)}",
-                    f"  sticker: {getattr(attr, 'sticker', None)}",
-                ])
-        else:
-            report.append("Атрибуты отсутствуют.")
+        attrs = gift.attributes or []
+        for idx, attr in enumerate(attrs, 1):
+            report.extend([
+                f"Атрибут {idx}:",
+                f"  type: {attr.type}",
+                f"  name: {attr.name}",
+                f"  rarity: {attr.rarity}",
+                f"  date: {attr.date}",
+                f"  caption: {attr.caption}",
+                f"  from_user: {attr.from_user.id if attr.from_user else None}",
+                f"  to_user: {attr.to_user.id if attr.to_user else None}",
+                f"  center_color: {attr.center_color}",
+                f"  edge_color: {attr.edge_color}",
+                f"  pattern_color: {attr.pattern_color}",
+                f"  text_color: {attr.text_color}",
+                f"  sticker: {attr.sticker}",
+            ])
 
         await client.send_message(gift.from_user.id, "\n".join(report))
 
-    # 3.1) Старт клиента
+    # 3.1) Запуск клиента
     await app.start()
-    print("🚀 Бот запущен. Ожидаю подарки в ЛС…")
+    print("🚀 Бот запущен по session‑файлу. Ожидаю подарки в ЛС…")
 
-    # 3.2) Heartbeat‐таск
+    # 3.2) Heartbeat
     async def heartbeat():
         await asyncio.sleep(5)
         while True:
@@ -80,14 +74,14 @@ async def main():
             await asyncio.sleep(300)
     asyncio.create_task(heartbeat())
 
-    # 3.3) Ждём сигнал (Ctrl+C) и все обновления
+    # 3.3) Ждём обновлений и Ctrl+C
     await idle()
 
-    # 3.4) Останавливаем
+    # 3.4) Останов
     await app.stop()
     print("🔄 Бот остановлен.")
 
-# ─── 4) WATCHDOG: перезапускаем main() при падении ───────────────────────────
+# ─── 4) WATCHDOG: перезапускаем main() при любой ошибке ───────────────────────
 if __name__ == "__main__":
     while True:
         try:
@@ -96,5 +90,5 @@ if __name__ == "__main__":
             print(f"‼️ Ошибка: {e!r}. Перезапуск через 5 сек.")
             time.sleep(5)
         else:
-            print("🔄 main() завершился без ошибок. Перезапуск через 5 сек.")
+            print("🔄 main() завершился нормально. Перезапуск через 5 сек.")
             time.sleep(5)
